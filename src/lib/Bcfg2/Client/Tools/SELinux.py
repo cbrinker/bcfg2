@@ -12,14 +12,14 @@ import Bcfg2.Client.Tools
 import Bcfg2.Client.Tools.POSIX.File
 from subprocess import Popen, PIPE
 
+
 def pack128(int_val):
     """ pack a 128-bit integer in big-endian format """
-    max_int = 2 ** (128) - 1
     max_word_size = 2 ** 32 - 1
-    
+
     if int_val <= max_word_size:
         return struct.pack('>L', int_val)
-    
+
     words = []
     for i in range(4):
         word = int_val & max_word_size
@@ -28,23 +28,24 @@ def pack128(int_val):
     words.reverse()
     return struct.pack('>4I', *words)
 
+
 def netmask_itoa(netmask, proto="ipv4"):
     """ convert an integer netmask (e.g., /16) to dotted-quad
     notation (255.255.0.0) or IPv6 prefix notation (ffff::) """
     if proto == "ipv4":
         size = 32
         family = socket.AF_INET
-    else: # ipv6
+    else:  # ipv6
         size = 128
         family = socket.AF_INET6
     try:
         int(netmask)
     except ValueError:
         return netmask
-    
+
     if netmask > size:
         raise ValueError("Netmask too large: %s" % netmask)
-    
+
     res = 0L
     for n in range(netmask):
         res |= 1 << (size - n - 1)
@@ -140,10 +141,10 @@ class SELinux(Bcfg2.Client.Tools.Tool):
                 types.append(entry.get('type'))
 
         for etype in types:
-            self.handlers[entry.get('type')].Remove([e for e in entries
-                                                     if e.get('type') == etype])
+            self.handlers[etype].Remove([e for e in entries
+                                         if e.get('type') == etype])
 
-        
+
 class SELinuxEntryHandler(object):
     etype = None
     key_format = ("name",)
@@ -151,7 +152,7 @@ class SELinuxEntryHandler(object):
     str_format = '%(name)s'
     custom_re = re.compile(' (?P<name>\S+)$')
     custom_format = None
-    
+
     def __init__(self, tool, logger, setup, config):
         self.tool = tool
         self.logger = logger
@@ -235,7 +236,7 @@ class SELinuxEntryHandler(object):
             return getattr(self, "_%sargs" % method)(entry)
         elif hasattr(self, "_defaultargs"):
             # default args
-            return self._defaultargs(entry)
+            return self._defaultargs(entry)  # pylint: disable=E1101
         else:
             raise NotImplementedError
 
@@ -244,7 +245,7 @@ class SELinuxEntryHandler(object):
 
     def canInstall(self, entry):
         return bool(self._key(entry))
-    
+
     def primarykey(self, entry):
         return ":".join([entry.tag, entry.get("type"), entry.get("name")])
 
@@ -693,6 +694,13 @@ class SELinuxModuleHandler(SELinuxEntryHandler):
             rv[os.path.basename(mod)[:-3]] = ('', 1)
         return rv
 
+    def _key(self, entry):
+        name = entry.get("name").lstrip("/")
+        if name.endswith(".pp"):
+            return name[:-3]
+        else:
+            return name
+
     def _key2attrs(self, key):
         rv = SELinuxEntryHandler._key2attrs(self, key)
         status = self.all_records[key][1]
@@ -725,7 +733,7 @@ class SELinuxModuleHandler(SELinuxEntryHandler):
         return (entry.text and self.setype and
                 SELinuxEntryHandler.canInstall(self, entry))
 
-    def Install(self, entry):
+    def Install(self, entry, _=None):
         if not self.filetool.install(self._pathentry(entry)):
             return False
         try:
@@ -783,13 +791,13 @@ class SELinuxModuleHandler(SELinuxEntryHandler):
                 return False
             else:
                 return True
-    
+
     def _addargs(self, entry):
         return (self._filepath(entry),)
-    
+
     def _defaultargs(self, entry):
         return (entry.get("name"),)
-    
+
     def FindExtra(self):
         specified = [self._key(e)
                      for e in self.tool.getSupportedEntries()
